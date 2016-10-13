@@ -66,6 +66,7 @@ export function attempt(req, res) {
       // user_answer = req.body['answer'+other_index];
       // save_response(actual.learning, user_answer);
     }).catch(function(e){
+      console.log(e);
       errors.push('Incorrect answer');
       response = {
         "success": false,
