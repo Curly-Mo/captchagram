@@ -66,10 +66,9 @@ export function attempt(req, res) {
       // user_answer = req.body['answer'+other_index];
       // save_response(actual.learning, user_answer);
     }).catch(function(e){
-      console.log(e);
       errors.push('Incorrect answer');
       response = {
-        "success": true,
+        "success": false,
         "challenge_ts": timestamp.toISOString(),
         "hostname": req.headers.host,
         "error-codes": errors

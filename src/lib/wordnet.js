@@ -1,6 +1,6 @@
 import wordNet from 'wordnet-magic';
 
-var wn = wordNet('data/wordnet.db');
+var wn = wordNet('data/wordnet.db', true);
 
 export function isHypernymOf(child, parent, callback){
   if(typeof parent === 'string'){
