@@ -40,7 +40,7 @@ function isHypernymOfSynset(child, parent){
     }
     let found = false;
     parent.forEach(function(p){
-      if(hypernyms.includes(p.synsetid)){
+      if(hypernyms.indexOf(p.synsetid) >= 0){
         found = true;
       }
     });
