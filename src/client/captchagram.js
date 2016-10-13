@@ -39,8 +39,9 @@ class Captchagram{
     let options = document.createElement('div');
     options.classList.add('captcha-options');
     options.classList.add('captcha-col2');
-    let refresh = document.createElement('button');
-    refresh.innerHTML = '&#8635;';
+    let refresh = document.createElement('input');
+    refresh.type = 'button';
+    refresh.value = '\u21BB';
     refresh.title = 'Request new challenge';
     refresh.addEventListener('click', function(e){
       e.preventDefault();
@@ -62,25 +63,26 @@ class Captchagram{
     let captcha = this;
 
     let audio = new Audio();
-    let play_button = document.createElement('button');
-    play_button.innerHTML = '&#9654;';
+    let play_button = document.createElement('input');
+    play_button.type = 'button';
+    play_button.value = '\u25B6';
     play_button.title = 'Play';
     play_button.classList.add('captcha-play-button');
     play_button.addEventListener('click', function(e){
       e.preventDefault();
       if(!audio.paused){
         audio.pause();
-        this.innerHTML = '&#9654;';
+        this.value = '\u25B6';
         this.title = 'Play';
       }else{
         captcha.items.forEach(function(item){
           item.audio.pause();
-          item.button.innerHTML = '&#9654;';
+          item.button.value = '\u25B6';
           item.button.title = 'Play';
         });
         audio.currentTime = 0;
         audio.play();
-        this.innerHTML = '&#9724;';
+        this.value = '\u25FC';
         this.title = 'Stop Audio';
       }
     });
@@ -88,6 +90,7 @@ class Captchagram{
     let answer = document.createElement('input');
     answer.type = 'text';
     answer.name = 'answer'+i;
+    answer.required = true;
     answer.classList.add('captcha-textbox');
     let item = {
       audio: audio,
@@ -96,7 +99,7 @@ class Captchagram{
     }
     audio.addEventListener('ended', function(e){
         //play_button.innerHTML = '&#8630;';
-        play_button.innerHTML = '&#9654;';
+        play_button.value = '\u25B6';
         let index = captcha.items.indexOf(item);
         let next = captcha.items[index+1];
         if(next != null){
@@ -114,8 +117,10 @@ class Captchagram{
       let response = xhr.response;
       console.log(response);
       if(response.success){
+        captcha.main.innerHTML = '';
         alert('You are a real human bean!');
       }else{
+        captcha.main.innerHTML = '';
         alert('Nice try, robot.');
         captcha.requestChallenge();
       }
@@ -124,7 +129,6 @@ class Captchagram{
     formdata.append('token', captcha.token);
     let data = {};
     for(let pair of formdata){
-      console.log(pair);
       data[pair[0]] = pair[1];
     }
     data = JSON.stringify(data);
@@ -213,6 +217,42 @@ function set_style(){
     }
     .captcha-border{
       border: 1px solid #dfdfdf;
+    }
+    .captcha-fade-out {
+      transition: all .6s ease;
+      border-color: transparent;
+    }
+    .captcha-rotate {
+      transition: all 2s ease-out;
+      transform: rotate(1080deg);
+    }
+    .captcha-scale-up {
+      transition: all .6s ease;
+      transform: scale(1,1);
+    }
+    .captcha-scale-down {
+      transition: all 0.5s ease;
+      transform: scale(0.2,0.2);
+    }
+    .captcha-circle {
+      border-top: 2px solid #1E88E5;
+      border-right-color: transparent;
+      border-bottom: 2px solid #1E88E5;
+      border-left-color: transparent;
+      border-radius: 12px;
+      background-color: #fafafa;
+    }
+    .captcha-check:after {
+      position: absolute;
+      content: '\u2713';
+      max-width: 0;
+      overflow: hidden;
+      opacity: 0.5;
+      font-size: 30px;
+      top: 0;
+      left: -24px;
+      color: #039F53;
+      transition: all 0.7s;
     }
   `;
   let style = document.createElement('style');

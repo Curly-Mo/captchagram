@@ -15,8 +15,7 @@ export default ({ config, db }) => {
     captcha.generate(req, res);
   });
 	api.post('/attempt', function(req, res){
-    let response = captcha.attempt(req);
-    res.json(response);
+    let response = captcha.attempt(req, res);
   });
 	api.post('/verify', function(req, res){
     let response = captcha.verify(req);

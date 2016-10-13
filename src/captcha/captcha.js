@@ -2,6 +2,7 @@ import fs from 'fs';
 import uuid from 'node-uuid';
 import async from 'async';
 import {random_sample, shuffle} from '../lib/util';
+import {isHypernymOf} from '../lib/wordnet';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({stdTTL: 300});
 
@@ -43,35 +44,46 @@ export function generate(req, res) {
   });
 }
 
-export function attempt(req) {
+export function attempt(req, res) {
   let success = false;
   let response = {};
   try{
     let actual = cache.get(req.body['token'], true);
     let timestamp = actual.timestamp;
     let errors = [];
-    if(actual.answer.value == req.body['answer'+actual.answer.index]){
-      success = true;
-    }else{
+    let user_answer = req.body['answer'+actual.answer.index];
+    // Use wordnet to test if user answer is a child of the actual label
+    isHypernymOf(user_answer, actual.answer.value).then(function(){
+      response = {
+        "success": true,
+        "challenge_ts": timestamp.toISOString(),
+        "hostname": req.headers.host,
+        "error-codes": errors
+      };
+      res.json(response);
+      //TODO: Function to save the users response as a ground truth will be called here
+      // let other_index = (actual.answer.index + 1) % 2;
+      // user_answer = req.body['answer'+other_index];
+      // save_response(actual.learning, user_answer);
+    }).catch(function(e){
+      console.log(e);
       errors.push('Incorrect answer');
-    }
-    response = {
-      "success": success,
-      // timestamp of the challenge load (ISO format yyyy-MM-dd'T'HH:mm:ssZZ)
-      "challenge_ts": timestamp.toISOString(),
-      // the hostname of the site where the reCAPTCHA was solved
-      "hostname": req.headers.host,
-      // optional
-      "error-codes": errors
-    };
+      response = {
+        "success": true,
+        "challenge_ts": timestamp.toISOString(),
+        "hostname": req.headers.host,
+        "error-codes": errors
+      };
+      res.json(response);
+    });
   }catch(e){
     response = {
       success: false,
       hostname: req.headers.host,
       error: 'Invalid or expired Token.'
     };
+    res.json(response);
   }
-  return response;
 }
 
 export function verify(req) {
