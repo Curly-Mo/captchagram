@@ -51,7 +51,7 @@ export function attempt(req, res) {
     let actual = cache.get(req.body['token'], true);
     let timestamp = actual.timestamp;
     let errors = [];
-    let user_answer = req.body['answer'+actual.answer.index];
+    let user_answer = req.body['answer'+actual.answer.index].trim();
     // Use wordnet to test if user answer is a child of the actual label
     isHypernymOf(user_answer, actual.answer.value).then(function(){
       response = {
@@ -105,6 +105,10 @@ const known_dataset = [
   {
     label: 'dog',
     path: './audio/dog.wav'
+  },
+  {
+    label: 'car horn',
+    path: './audio/horn.wav'
   }
 ]
 
@@ -114,5 +118,8 @@ const learning_dataset = [
   },
   {
     path: './audio/birds.wav'
+  },
+  {
+    path: './audio/siren.wav'
   }
 ]
