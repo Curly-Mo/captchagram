@@ -2,7 +2,7 @@ import fs from 'fs';
 import uuid from 'node-uuid';
 import async from 'async';
 import {random_sample, shuffle} from '../lib/util';
-import {isHypernymOf} from '../lib/wordnet';
+import {getAllSynsetIDs, getSynsetIDs} from '../lib/wordnet';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({stdTTL: 300});
 
@@ -28,43 +28,65 @@ export function generate(req, res) {
       suggestions: 'natural, human, musical, machine, animal'
     };
 
+    // Return json response
+    res.json(data);
+
     // Cache the token and answer for 5 minutes (300 secs)
     cache.set(token, {
       timestamp: new Date(Date.now()),
       answer: {
         index: sounds.indexOf(known),
-        value: known.label
+        value: known.label,
+        synsets: known.synsets
       },
-      learning: learning
+      learning: {
+        index: sounds.indexOf(learning),
+        value: learning
+      },
+      attempted: false,
+      solved: false,
     });
-    res.json(data);
-    res.on('finish', function(){
-      console.log('stream finished');
-    });
+
   });
 }
 
 export function attempt(req, res) {
-  let success = false;
   let response = {};
+  let token = req.body['token'];
   try{
-    let actual = cache.get(req.body['token'], true);
+    let actual = cache.get(token, true);
+    actual.attempted = true;
     let timestamp = actual.timestamp;
     let errors = [];
     let user_answer = req.body['answer'+actual.answer.index].trim();
     // Use wordnet to test if user answer is a child of the actual label
-    isHypernymOf(user_answer, actual.answer.value).then(function(){
-      response = {
-        "success": true,
-        "challenge_ts": timestamp.toISOString(),
-        "hostname": req.headers.host,
-        "error-codes": errors
-      };
-      res.json(response);
-      //TODO: Function to save the users response as a ground truth will be called here
-      // let other_index = (actual.answer.index + 1) % 2;
-      // user_answer = req.body['answer'+other_index];
-      // save_response(actual.learning, user_answer);
+    getSynsetIDs(user_answer).then(synset_ids => {
+      let found = false;
+      let actual_ids = actual.answer.synsets.map(Number);
+      for(let i=0; i<synset_ids.length; i++){
+        if(actual_ids.indexOf(synset_ids[i]) > 0){
+          found = true;
+          break
+        }
+      }
+      console.log(synset_ids);
+      console.log(actual_ids);
+      console.log(actual_ids.contains(synset_ids[0]));
+      if(found){
+        response = {
+          "success": true,
+          "challenge_ts": timestamp.toISOString(),
+          "hostname": req.headers.host,
+          "error-codes": errors
+        };
+        res.json(response);
+        //TODO: Function to save the users response as a ground truth will be called here
+        // let other_index = (actual.answer.index + 1) % 2;
+        // user_answer = req.body['answer'+other_index];
+        // save_response(actual.learning, user_answer);
+      }else{
+        throw 'User response is not related to known label';
+      }
     }).catch(function(e){
       errors.push('Incorrect answer');
       response = {
@@ -75,6 +97,8 @@ export function attempt(req, res) {
       };
       res.json(response);
     });
+  // Update the cache, to mark it has been attempted and therefore no longer valid
+  cache.set(token, actual);
   }catch(e){
     response = {
       success: false,
@@ -101,7 +125,7 @@ export function verify(req) {
 
 
 // Fake datasets until we have database integration
-const known_dataset = [
+var known_dataset = [
   {
     label: 'dog',
     path: './audio/dog.wav'
@@ -111,8 +135,20 @@ const known_dataset = [
     path: './audio/horn.wav'
   }
 ]
+// Get all synsetids for the known labels
+// This is slow, and so must be done up front instead of on-the-fly
+known_dataset.forEach(function(item, i){
+  getAllSynsetIDs(item.label).then(synsetids => {
+    item.synsets = synsetids;
+  }).catch(e => {
+    // We will get here if a known label is not recognized by WordNet
+    // For now, just remove it from the dataset
+    console.log(e);
+    known_dataset.splice(i, 1);
+  });
+});
 
-const learning_dataset = [
+var learning_dataset = [
   {
     path: './audio/sax.wav'
   },
