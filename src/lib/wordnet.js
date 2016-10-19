@@ -1,6 +1,6 @@
 import wordNet from 'wordnet-magic';
 
-var wn = wordNet('data/wordnet.db', true);
+var wn = wordNet('data/wordnet.db');
 
 export function getSynsetIDs(label){
   let word = new wn.Word(label);
