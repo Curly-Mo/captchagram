@@ -69,9 +69,6 @@ export function attempt(req, res) {
           break
         }
       }
-      console.log(synset_ids);
-      console.log(actual_ids);
-      console.log(actual_ids.contains(synset_ids[0]));
       if(found){
         response = {
           "success": true,

@@ -7,7 +7,7 @@
     "dev": "nodemon -w src --exec \"babel-node src --presets es2015,stage-0\"",
     "build": "babel src -s -D -d dist --presets es2015,stage-0",
     "start": "node dist",
-    "prestart": "npm run -s client; npm run -s build",
+    "prestart": "npm run -s client; npm run -s build; bash data/download_wordnet.sh",
     "test": "eslint src",
     "client": "babel src/client -s -D -d dist/client --presets es2015,stage-0"
   },
