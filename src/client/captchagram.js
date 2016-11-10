@@ -46,7 +46,13 @@ class Captchagram{
     let right = document.createElement('div');
     right.classList.add('captcha-right');
     right.classList.add('captcha-col2');
-    right.classList.add('captcha-grid');
+    let upper_right = document.createElement('div');
+    let lower_right = document.createElement('div');
+    upper_right.classList.add('captcha-grid');
+    right.append(upper_right);
+    right.append(lower_right);
+    container.appendChild(right);
+
     // Options
     let options = document.createElement('div');
     options.classList.add('captcha-col2');
@@ -68,14 +74,22 @@ class Captchagram{
       e.preventDefault();
     });
     options.appendChild(info);
-    right.appendChild(options);
+    upper_right.appendChild(options);
     // Logo
     let logo = document.createElement('div');
     logo.classList.add('captcha-col2');
     logo.classList.add('captcha-logo');
     logo.innerHTML = 'HeardCha';
-    right.appendChild(logo);
-    container.appendChild(right);
+    upper_right.appendChild(logo);
+
+    let cg_link = document.createElement('a');
+    cg_link.href = 'http://citygram.smusic.nyu.edu/';
+    cg_link.target = '_blank';
+    let cg_logo = document.createElement('img');
+    cg_logo.src = '/client/img/logo.png';
+    cg_link.appendChild(cg_logo);
+    cg_logo.classList.add('captcha-cg-logo');
+    lower_right.appendChild(cg_link);
 
     let submit = document.createElement('input');
     submit.type = 'submit';
@@ -372,6 +386,12 @@ function set_style(){
       width: 70%;
       color: #FFFFFF;
       font-weight: bold;
+    }
+    .captcha-cg-logo{
+      width: 100%;
+      position:absolute;
+      bottom: 0;
+      right: 0;
     }
     .captcha-play-button{
       position: absolute;

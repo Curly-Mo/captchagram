@@ -28,7 +28,8 @@ initializeDb( db => {
 	// captcha router
 	app.use('/captcha', captcha({ config, db }));
 
-  // client example
+  // client
+  app.use('/client', express.static(__dirname + '/client'));
   app.use('/example', express.static(__dirname + '/client'));
 
 	app.server.listen(process.env.PORT || config.port);
