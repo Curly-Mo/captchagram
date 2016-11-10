@@ -113,6 +113,25 @@ class Captchagram{
     play_button.innerHTML = '\u25B6';
     play_button.title = 'Play';
     play_button.classList.add('captcha-play-button');
+
+    let answer = document.createElement('input');
+    answer.type = 'text';
+    answer.name = 'answer'+i;
+    answer.required = true;
+    let nth = ['First', 'Second', 'Third', 'Fourth'];
+    answer.placeholder = nth[i] + ' sound';
+    answer.classList.add('captcha-textbox');
+
+    let scriptNode = captcha.context.createScriptProcessor(1024, 1, 1);
+    let item = {
+      content: content,
+      source: source,
+      scriptNode: scriptNode,
+      button: play_button,
+      answer: answer,
+      playing: false
+    }
+
     let canvas = document.createElement('canvas');
     canvas.classList.add('captcha-canvas');
     let canvas_ctx= canvas.getContext("2d");
@@ -124,8 +143,13 @@ class Captchagram{
     gradient.addColorStop(0.75,'#ffff00');
     gradient.addColorStop(0.25,'#ff0000');
     gradient.addColorStop(0,'#8b0000');
-    let scriptNode = captcha.context.createScriptProcessor(1024, 1, 1);
     scriptNode.onaudioprocess = function(e){
+      if(!item.playing){
+        canvas_ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas_ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        canvas_ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
       let rms = 0;
       for (var channel = 0; channel < e.inputBuffer.numberOfChannels; channel++) {
         let input = e.inputBuffer.getChannelData(channel);
@@ -138,28 +162,20 @@ class Captchagram{
       rms = rms / e.inputBuffer.numberOfChannels;
       // clear the current state
       canvas_ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // set the fill style
-      canvas_ctx.fillStyle=gradient;
-      // create the meters
-      canvas_ctx.fillRect(0,canvas.height,canvas.width,-rms*500);
+      // Progress bar
+      console.log(item.source.start_time);
+      if(item.source.start_time){
+        let percent = (captcha.context.currentTime - item.source.start_time) / item.source.buffer.duration;
+        console.log(percent);
+        canvas_ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        canvas_ctx.fillRect(0, 0, canvas.width*percent, canvas.height);
+      }
+      // create the meter
+      canvas_ctx.fillStyle = gradient;
+      canvas_ctx.fillRect(canvas.width*0.25, canvas.height, canvas.width*0.5, -rms*500);
     }
     scriptNode.connect(captcha.context.destination);
 
-    let answer = document.createElement('input');
-    answer.type = 'text';
-    answer.name = 'answer'+i;
-    answer.required = true;
-    let nth = ['First', 'Second', 'Third', 'Fourth'];
-    answer.placeholder = nth[i] + ' sound';
-    answer.classList.add('captcha-textbox');
-    let item = {
-      content: content,
-      source: source,
-      scriptNode: scriptNode,
-      button: play_button,
-      answer: answer,
-      playing: false
-    }
 
     content.addEventListener('click', function(e){
       e.preventDefault();
@@ -183,6 +199,7 @@ class Captchagram{
           }
         }
         item.source.start();
+        item.source.start_time = captcha.context.currentTime;
         button.innerHTML = '\u25FC';
         button.title = 'Stop Audio';
       }
@@ -363,7 +380,7 @@ function set_style(){
       padding: 0.2em;
     }
     .captcha-canvas{
-      width: 50%;
+      width: 100%;
       margin: 0 auto;
       display: block;
     }
