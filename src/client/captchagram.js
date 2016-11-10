@@ -291,10 +291,18 @@ class Captchagram{
       let lower = document.createElement('div');
       upper.classList.add('captcha-grid');
       upper.classList.add('captcha-wrapper');
-      lower.classList.add('captcha-grid');
       lower.classList.add('captcha-wrapper');
       captcha.main.appendChild(upper);
       captcha.main.appendChild(lower);
+
+      let instructions = document.createElement('span');
+      instructions.innerHTML = 'Type what you hear:';
+      lower.appendChild(instructions);
+
+      let answers = document.createElement('div');
+      answers.classList.add('captcha-grid');
+      lower.appendChild(answers);
+
       let semaphore = response.streams.length;
       for(let i=0; i<response.streams.length; i++){
         let item = captcha.item_ui(i);
@@ -303,7 +311,7 @@ class Captchagram{
         wrapper.appendChild(item.content);
         upper.appendChild(wrapper);
         item.answer.classList.add('captcha-col'+response.streams.length);
-        lower.appendChild(item.answer);
+        answers.appendChild(item.answer);
 
         let data = _base64ToArrayBuffer(response.streams[i]);
         captcha.context.decodeAudioData(data, function(buffer){
