@@ -2,16 +2,16 @@ window.addEventListener('load', init);
 
 function init(){
   window.captchas = [];
-  let captchas = document.querySelectorAll('.captchagram');
+  let captchas = document.querySelectorAll('.heardcha');
   for(let c=0; c<captchas.length; c++){
     let container = captchas[c];
-    let captcha = new Captchagram(container);
+    let captcha = new Heardcha(container);
     window.captchas.push(captcha);
   }
   set_style();
 }
 
-class Captchagram{
+class Heardcha{
   constructor(element){
     this.container = element;
     var AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -49,8 +49,8 @@ class Captchagram{
     let upper_right = document.createElement('div');
     let lower_right = document.createElement('div');
     upper_right.classList.add('captcha-grid');
-    right.append(upper_right);
-    right.append(lower_right);
+    right.appendChild(upper_right);
+    right.appendChild(lower_right);
     container.appendChild(right);
 
     // Options
@@ -94,6 +94,17 @@ class Captchagram{
     let submit = document.createElement('input');
     submit.type = 'submit';
     form.appendChild(submit);
+
+    // Overlay
+    let overlay = document.createElement('div');
+    overlay.classList.add('captcha-overlay');
+    overlay.innerHTML = 'Are you Human?';
+    this.overlay = overlay;
+    overlay.addEventListener('click', function(e){
+      captcha.items[0].content.click();
+      this.style.display = 'none';
+    });
+    main.appendChild(overlay);
 
     this.main = main;
 
@@ -177,10 +188,8 @@ class Captchagram{
       // clear the current state
       canvas_ctx.clearRect(0, 0, canvas.width, canvas.height);
       // Progress bar
-      console.log(item.source.start_time);
       if(item.source.start_time){
         let percent = (captcha.context.currentTime - item.source.start_time) / item.source.buffer.duration;
-        console.log(percent);
         canvas_ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         canvas_ctx.fillRect(0, 0, canvas.width*percent, canvas.height);
       }
@@ -231,21 +240,24 @@ class Captchagram{
     xhr.onload = function(e){
       let response = xhr.response;
       console.log(response);
+
       if(response.success){
-        captcha.main.innerHTML = '';
-        let feedback = document.createElement('span');
-        feedback.innerHTML = 'You are Human!';
-        feedback.style.font_size = '16';
-        feedback.style.color = '#FFFFFF';
-        captcha.main.appendChild(feedback);
+        let checkmark = captcha.main.querySelector('.captcha-feedback-animation');
+        checkmark.classList.remove('captcha-loader');
+        checkmark.classList.remove('captcha-wrong');
+        checkmark.classList.add('captcha-checkmark');
+        let text = captcha.main.querySelector('.captcha-feedback-text');
+        text.innerHTML = 'You are Human!';
       }else{
-        captcha.main.innerHTML = '';
-        let feedback = document.createElement('span');
-        feedback.innerHTML = 'Try again, Robot';
-        feedback.style.font_size = '16';
-        feedback.style.color = '#FFFFFF';
-        captcha.main.appendChild(feedback);
-        captcha.requestChallenge();
+        let checkmark = captcha.main.querySelector('.captcha-feedback-animation');
+        checkmark.classList.remove('captcha-loader');
+        checkmark.classList.remove('captcha-checkmark');
+        checkmark.classList.add('captcha-wrong');
+        let text = captcha.main.querySelector('.captcha-feedback-text');
+        text.innerHTML = 'Try again.';
+        setTimeout(function(){
+          captcha.requestChallenge();
+        }, 500);
       }
     }
     let formdata = new FormData(this.form);
@@ -261,6 +273,26 @@ class Captchagram{
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.responseType = 'json';
     xhr.send(data);
+
+    // Visual Feedback
+    let height = captcha.main.clientHeight;
+    captcha.main.innerHTML = '';
+    let feedback = document.createElement('div');
+    feedback.classList.add('captcha-wrapper');
+    feedback.classList.add('captcha-feedback-wrapper');
+    feedback.classList.add('captcha-grid');
+    feedback.style.height = height - 6.4;
+    let checkmark = document.createElement('div');
+    checkmark.classList.add('captcha-feedback-animation');
+    checkmark.classList.add('captcha-col2');
+    checkmark.classList.add('captcha-loader');
+    feedback.appendChild(checkmark);
+    let text = document.createElement('div');
+    text.classList.add('captcha-col2');
+    text.classList.add('captcha-feedback-text');
+    text.innerHTML = 'Are you Human?';
+    feedback.appendChild(text);
+    captcha.main.appendChild(feedback);
   }
 
   requestChallenge(callback){
@@ -270,7 +302,7 @@ class Captchagram{
     xhr.onload = function(e){
       let response = xhr.response;
       console.log(response);
-      for(let i=0; i< captcha.items.length; i++){
+      for(let i=0; i<captcha.items.length; i++){
         let item = captcha.items[i];
         if(item.playing){
           item.source.stop();
@@ -279,14 +311,15 @@ class Captchagram{
 
       captcha.token = response.token;
 
-      captcha.main.innerHTML = '';
-      for(let i=0; i<captcha.items.length; i++){
-        let item = captcha.items[i];
-        item.content.innerHTML = '';
-        item.source.disconnect();
-        item.playing = false;
+      if(captcha.items.length > 0){
+        captcha.main.innerHTML = '';
+        for(let i=0; i<captcha.items.length; i++){
+          let item = captcha.items[i];
+          item.source.disconnect();
+          item.answer.value = '';
+          item.playing = false;
+        }
       }
-      captcha.items = [];
       let upper = document.createElement('div');
       let lower = document.createElement('div');
       upper.classList.add('captcha-grid');
@@ -305,7 +338,11 @@ class Captchagram{
 
       let semaphore = response.streams.length;
       for(let i=0; i<response.streams.length; i++){
-        let item = captcha.item_ui(i);
+        let item = captcha.items[i];
+        if(item == null){
+          item = captcha.item_ui(i);
+          captcha.items.push(item);
+        }
         let wrapper = document.createElement('div');
         wrapper.classList.add('captcha-col'+response.streams.length);
         wrapper.appendChild(item.content);
@@ -329,7 +366,6 @@ class Captchagram{
         },function(e){
           console.log(e);
         });
-        captcha.items.push(item);
       }
       //let suggestions = document.createElement('div');
       //suggestions.innerHTML = 'Eg. ' + response.suggestions;
@@ -360,10 +396,10 @@ class Captchagram{
 
 function set_style(){
   let body = `
-    .captchagram{
+    .heardcha{
       font-family: 'Roboto', sans-serif;
     }
-    .captchagram .material-icons{
+    .heardcha.material-icons{
       font-size: 18px;
     }
     .captcha-container{
@@ -430,41 +466,363 @@ function set_style(){
     .captcha-border{
       border: 1px solid #dfdfdf;
     }
-    .captcha-fade-out {
-      transition: all .6s ease;
-      border-color: transparent;
-    }
-    .captcha-rotate {
-      transition: all 2s ease-out;
-      transform: rotate(1080deg);
-    }
-    .captcha-scale-up {
-      transition: all .6s ease;
-      transform: scale(1,1);
-    }
-    .captcha-scale-down {
-      transition: all 0.5s ease;
-      transform: scale(0.2,0.2);
-    }
-    .captcha-circle {
-      border-top: 2px solid #1E88E5;
-      border-right-color: transparent;
-      border-bottom: 2px solid #1E88E5;
-      border-left-color: transparent;
-      border-radius: 12px;
-      background-color: #fafafa;
-    }
-    .captcha-check:after {
+    .captcha-overlay{
       position: absolute;
-      content: '\u2713';
-      max-width: 0;
-      overflow: hidden;
-      opacity: 0.5;
-      font-size: 30px;
+      left: 0;
+      right: 0;
       top: 0;
-      left: -24px;
-      color: #039F53;
-      transition: all 0.7s;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.8);
+      z-index: 999;
+      font-size: 3em;
+      color: #000000;
+      text-align: center;
+      text-shadow: -1px 0 white, 0 1px white, 1px 0 white, 0 -1px white;
+      cursor: pointer;
+    }
+    .captcha-overlay:before {
+      content: '';
+      font-size: medium;
+      position: absolute;
+      width: 9em;
+      height: 9em;
+      border-radius: 50%;
+      border: 0.6em solid #ffffff;
+      transition: all 0.3s;
+      -webkit-transition: all 0.3s;
+      -moz-transition: all 0.3s;
+      margin: auto;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+    }
+    .captcha-overlay:after {
+      content: '';
+      transition: opacity 0.6s;
+      -webkit-transition: opacity 0.6s;
+      -moz-transition: opacity 0.6s;
+      border-top: 50px solid transparent;
+      border-bottom: 50px solid transparent;
+      border-left: 60px solid #ffffff;
+      position: absolute;
+      left: 12px;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      margin: auto;
+      width: 0;
+      height: 0;
+    }
+    .captcha-overlay:hover:before, .captcha-overlay:focus:before {
+      transform: scale(1.1);
+      -webkit-transform: scale(1.1);
+      -moz-transform: scale(1.1);
+    }
+    .captcha-feedback-text {
+      font-size: 2em;
+      margin: auto;
+    }
+    .captcha-feedback-animation{
+      width: 30%;
+    }
+    .captcha-feedback-wrapper{
+      display: flex;
+      padding: 0;
+      width: 100%;
+      position: relative;
+      align-items: center;
+    }
+    .captcha-checkmark:after {
+      -webkit-animation-delay: 100ms;
+      -moz-animation-delay: 100ms;
+      animation-delay: 100ms;
+      -webkit-animation-duration: 1s;
+      -moz-animation-duration: 1s;
+      animation-duration: 1s;
+      -webkit-animation-timing-function: ease;
+      -moz-animation-timing-function: ease;
+      animation-timing-function: ease;
+      -webkit-animation-name: checkmark;
+      -moz-animation-name: checkmark;
+      animation-name: checkmark;
+      -webkit-transform: scaleX(-1) rotate(135deg);
+      -moz-transform: scaleX(-1) rotate(135deg);
+      -ms-transform: scaleX(-1) rotate(135deg);
+      -o-transform: scaleX(-1) rotate(135deg);
+      transform: scaleX(-1) rotate(135deg);
+      -webkit-animation-fill-mode: forwards;
+      -moz-animation-fill-mode: forwards;
+      animation-fill-mode: forwards;
+    }
+    .captcha-checkmark:after {
+      opacity: 0;
+      height: 75px;
+      width: 37.5px;
+      -webkit-transform-origin: left top;
+      -moz-transform-origin: left top;
+      -ms-transform-origin: left top;
+      -o-transform-origin: left top;
+      transform-origin: left top;
+      border-right: 15px solid #2EB150;
+      border-top: 15px solid #2EB150;
+      border-radius: 2.5px !important;
+      content: '';
+      left: 25px;
+      position: absolute;
+    }
+
+    @-webkit-keyframes checkmark {
+      0% {
+        height: 0;
+        width: 0;
+        opacity: 0;
+      }
+      20% {
+        height: 0;
+        width: 37.5px;
+        opacity: 1;
+      }
+      40% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+      100% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+    }
+    @-moz-keyframes checkmark {
+      0% {
+        height: 0;
+        width: 0;
+        opacity: 1;
+      }
+      20% {
+        height: 0;
+        width: 37.5px;
+        opacity: 1;
+      }
+      40% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+      100% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+    }
+    @keyframes checkmark {
+      0% {
+        height: 0;
+        width: 0;
+        opacity: 1;
+      }
+      20% {
+        height: 0;
+        width: 37.5px;
+        opacity: 1;
+      }
+      40% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+      100% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+    }
+    .captcha-loader {
+      font-size: 10px;
+      margin: 50px auto;
+      text-indent: -9999em;
+      width: 11em;
+      height: 11em;
+      border-radius: 50%;
+      background: #03a9f4;
+      background: -moz-linear-gradient(left, #03a9f4 10%, rgba(255, 255, 255, 0) 42%);
+      background: -webkit-linear-gradient(left, #03a9f4 10%, rgba(255, 255, 255, 0) 42%);
+      background: -o-linear-gradient(left, #03a9f4 10%, rgba(255, 255, 255, 0) 42%);
+      background: -ms-linear-gradient(left, #03a9f4 10%, rgba(255, 255, 255, 0) 42%);
+      background: linear-gradient(to right, #03a9f4 10%, rgba(255, 255, 255, 0) 42%);
+      position: relative;
+      -webkit-animation: load3 1.4s infinite linear;
+      animation: load3 1.4s infinite linear;
+      -webkit-transform: translateZ(0);
+      -ms-transform: translateZ(0);
+      transform: translateZ(0);
+    }
+    .captcha-loader:before {
+      width: 50%;
+      height: 50%;
+      background: #03a9f4;
+      border-radius: 100% 0 0 0;
+      position: absolute;
+      top: 0;
+      left: 0;
+      content: '';
+    }
+    .captcha-loader:after {
+      background: #ffffff;
+      width: 75%;
+      height: 75%;
+      border-radius: 50%;
+      content: '';
+      margin: auto;
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+    }
+    @-webkit-keyframes load3 {
+      0% {
+        -webkit-transform: rotate(0deg);
+        transform: rotate(0deg);
+      }
+      100% {
+        -webkit-transform: rotate(360deg);
+        transform: rotate(360deg);
+      }
+    }
+    @keyframes load3 {
+      0% {
+        -webkit-transform: rotate(0deg);
+        transform: rotate(0deg);
+      }
+      100% {
+        -webkit-transform: rotate(360deg);
+        transform: rotate(360deg);
+      }
+    }
+    .captcha-wrong:before {
+      -webkit-transform: scaleX(-1) rotate(45deg);
+      -moz-transform: scaleX(-1) rotate(45deg);
+      -ms-transform: scaleX(-1) rotate(45deg);
+      -o-transform: scaleX(-1) rotate(45deg);
+      transform: scaleX(-1) rotate(45deg);
+    }
+    .captcha-wrong:before {
+      opacity: 1;
+      height: 75px;
+      width: 37.5px;
+      -webkit-transform-origin: right bottom;
+      -moz-transform-origin: right bottom;
+      -ms-transform-origin: right bottom;
+      -o-transform-origin: right bottom;
+      transform-origin: right bottom;
+      border-left: 15px solid #7c0000;
+      border-radius: 2.5px !important;
+      content: '';
+      left: 25px;
+      top: -10px;
+      position: absolute;
+    }
+    .captcha-wrong:after {
+      -webkit-animation-duration: 0.5s;
+      -moz-animation-duration: 0.5s;
+      animation-duration: 0.5s;
+      -webkit-animation-timing-function: ease;
+      -moz-animation-timing-function: ease;
+      animation-timing-function: ease;
+      -webkit-animation-name: wrong;
+      -moz-animation-name: wrong;
+      animation-name: wrong;
+      -webkit-transform: scaleX(-1) rotate(135deg);
+      -moz-transform: scaleX(-1) rotate(135deg);
+      -ms-transform: scaleX(-1) rotate(135deg);
+      -o-transform: scaleX(-1) rotate(135deg);
+      transform: scaleX(-1) rotate(135deg);
+      -webkit-animation-fill-mode: forwards;
+      -moz-animation-fill-mode: forwards;
+      animation-fill-mode: forwards;
+    }
+    .captcha-wrong:after {
+      opacity: 0;
+      height: 75px;
+      width: 37.5px;
+      -webkit-transform-origin: left top;
+      -moz-transform-origin: left top;
+      -ms-transform-origin: left top;
+      -o-transform-origin: left top;
+      transform-origin: left top;
+      border-right: 15px solid #7c0000;
+      border-radius: 2.5px !important;
+      content: '';
+      left: 25px;
+      position: absolute;
+    }
+    @-webkit-keyframes wrong {
+      0% {
+        height: 0;
+        width: 0;
+        opacity: 0;
+      }
+      20% {
+        height: 0;
+        width: 37.5px;
+        opacity: 1;
+      }
+      40% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+      100% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+    }
+    @-moz-keyframes wrong {
+      0% {
+        height: 0;
+        width: 0;
+        opacity: 1;
+      }
+      20% {
+        height: 0;
+        width: 37.5px;
+        opacity: 1;
+      }
+      40% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+      100% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+    }
+    @keyframes wrong {
+      0% {
+        height: 0;
+        width: 0;
+        opacity: 1;
+      }
+      20% {
+        height: 0;
+        width: 37.5px;
+        opacity: 1;
+      }
+      40% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
+      100% {
+        height: 75px;
+        width: 37.5px;
+        opacity: 1;
+      }
     }
   `;
   let font = document.createElement('link');
