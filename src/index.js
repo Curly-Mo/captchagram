@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 
 import initializeDb from './db';
 import captcha from './captcha';
+import analyze from './analyze';
 import config from './config.json';
 
 let app = express();
@@ -28,9 +29,12 @@ initializeDb( db => {
 	// captcha router
 	app.use('/captcha', captcha({ config, db }));
 
-  // client
-  app.use('/client', express.static(__dirname + '/client'));
-  app.use('/example', express.static(__dirname + '/client'));
+    // client
+    app.use('/client', express.static(__dirname + '/client'));
+    app.use('/example', express.static(__dirname + '/client'));
+
+	// analyze table
+	app.use('/analyze', analyze({ config, db }));
 
 	app.server.listen(process.env.PORT || config.port);
 

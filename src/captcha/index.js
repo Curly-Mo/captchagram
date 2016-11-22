@@ -4,6 +4,7 @@ import * as captcha from './captcha';
 
 export default ({ config, db }) => {
 	let api = Router();
+  captcha.init(config, db);
 
   // Index route, probably something like a homepage
 	api.get('/', (req, res) => {

@@ -195,7 +195,7 @@ class Heardcha{
       }
       // create the meter
       canvas_ctx.fillStyle = gradient;
-      canvas_ctx.fillRect(canvas.width*0.25, canvas.height, canvas.width*0.5, -rms*500);
+      canvas_ctx.fillRect(canvas.width*0.25, canvas.height, canvas.width*0.5, -rms*1000);
     }
     scriptNode.connect(captcha.context.destination);
 

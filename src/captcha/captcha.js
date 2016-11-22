@@ -1,24 +1,32 @@
 import fs from 'fs';
+import path from 'path';
 import uuid from 'node-uuid';
 import async from 'async';
 import {random_sample, shuffle} from '../lib/util';
 import {getAllSynsetIDs, getSynsetIDs} from '../lib/wordnet';
+import {get_intersections} from '../lib/sat';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({stdTTL: 300});
 
 export function generate(req, res) {
   let token = uuid.v1();
-  let known = random_sample(known_dataset, 1);
-  let learning = random_sample(learning_dataset, 1);
+  let known = random_sample(global.dataset, 1);
+  let learning = random_sample(global.dataset, 1);
   let sounds = shuffle([known, learning]);
-  let files = sounds.map(function(sound){ return sound.path });
+  let files = sounds.map(function(sound){ return sound.filepath });
+  console.log(sounds[0].labels);
+  console.log(sounds[1].labels);
 
   async.map(files, fs.readFile, function(err, buffers) {
     if(err) {
         throw err;
     }
     let streams = [];
-    buffers.forEach(function(buffer){
+    buffers.forEach(function(buffer, i){
+      let sr = buffer.length / 120000;
+      let start = sr * sounds[i].start_time;
+      let end = sr * sounds[i].end_time;
+      buffer = buffer.slice(start, end);
       streams.push(buffer.toString('base64'));
     });
 
@@ -36,7 +44,7 @@ export function generate(req, res) {
       timestamp: new Date(Date.now()),
       answer: {
         index: sounds.indexOf(known),
-        value: known.label,
+        value: known.labels,
         synsets: known.synsets
       },
       learning: {
@@ -121,38 +129,32 @@ export function verify(req) {
 }
 
 
-// Fake datasets until we have database integration
-var known_dataset = [
-  {
-    label: 'dog',
-    path: './audio/dog.wav'
-  },
-  {
-    label: 'car horn',
-    path: './audio/horn.wav'
-  }
-]
-// Get all synsetids for the known labels
-// This is slow, and so must be done up front instead of on-the-fly
-known_dataset.forEach(function(item, i){
-  getAllSynsetIDs(item.label).then(synsetids => {
-    item.synsets = synsetids;
-  }).catch(e => {
-    // We will get here if a known label is not recognized by WordNet
-    // For now, just remove it from the dataset
-    console.log(e);
-    known_dataset.splice(i, 1);
+global.dataset = [];
+export function init(config, db){
+  console.log('initializing dataset wordnet synsets...');
+  // Fake datasets until we have database integration
+  get_intersections(db, function(dataset){
+    // Get all synsetids for the known labels
+    // This is slow, and so must be done up front instead of on-the-fly
+    global.dataset = dataset;
+    let semaphore = 0;
+    dataset.forEach(function(item, i){
+      item.labels.forEach(function(label){
+        semaphore += 1;
+        getAllSynsetIDs(label).then(synsetids => {
+          item.synsets = (item.synsets || []).concat(synsetids);
+          semaphore-=1;
+          if(semaphore <= 0){
+            console.log('finished init');
+          }
+        }).catch(e => {
+          // We will get here if a known label is not recognized by WordNet
+          // For now, just remove it from the dataset
+          console.log(e);
+          dataset.splice(i, 1);
+        });
+      });
+      item.filepath = path.join(config.audioDir, item.file_name);
+    });
   });
-});
-
-var learning_dataset = [
-  {
-    path: './audio/sax.wav'
-  },
-  {
-    path: './audio/birds.wav'
-  },
-  {
-    path: './audio/siren.wav'
-  }
-]
+}
