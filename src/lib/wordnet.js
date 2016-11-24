@@ -56,6 +56,42 @@ function getAllSynsets(label){
   return result;
 }
 
+export function getHypernymIDs(label){
+  let result = getHypernyms(label).then(synsets => {
+    let ids = synsets.map(synset => {
+      return synset.synsetid
+    });
+    return ids;
+  });
+  return result;
+}
+
+function getHypernyms(label){
+  let word = new wn.Word(label);
+  let result = word.getSynsets().then(synsets => {
+    let promises = [];
+    synsets.forEach(synset => {
+      let hypernyms = synset.getHypernymsTree().then(parents => {
+        let sets = [];
+        parents.forEach(tree => {
+          sets = sets.concat(parse_tree(tree, 'hypernym'));
+        });
+        return sets;
+      });
+      promises.push(hypernyms);
+    });
+    promises.push(synsets);
+    let promise = Promise.all(promises);
+    promise = promise.then(values => {
+      values = [].concat.apply([], values);
+      return values;
+    });
+    return promise;
+  });
+  return result;
+}
+
+
 export function areRelated(label1, label2){
   let synsets1 = getSynsetIDs(label1);
   let synsets2 = getAllSynsetIDs(label2);

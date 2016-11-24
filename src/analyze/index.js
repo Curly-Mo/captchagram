@@ -7,6 +7,9 @@ export default ({ config, db }) => {
   // Index route, probably something like a homepage
 	api.get('/', (req, res) => {
     get_intersections(db, function(intersections){
+      intersections.forEach(function(i){
+        console.log(i.labels);
+      });
       res.json(intersections);
     });
 	});

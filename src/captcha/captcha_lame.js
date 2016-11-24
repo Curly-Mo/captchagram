@@ -1,5 +1,5 @@
 import fs from 'fs';
-import ffprobe from 'node-ffprobe';
+import * as lame from 'lame';
 import path from 'path';
 import uuid from 'node-uuid';
 import async from 'async';
@@ -17,45 +17,81 @@ export function generate(req, res) {
   let files = sounds.map(function(sound){ return sound.filepath });
   console.log(sounds[0].labels);
   console.log(sounds[1].labels);
-  async.map(files, ffprobe, function(err, formats) {
-    async.map(files, fs.readFile, function(err, buffers) {
-      if(err) {
-          throw err;
-      }
-      let streams = [];
-      buffers.forEach(function(buffer, i){
-        let sr = buffer.length / formats[i].format.duration;
-        let start = sr * sounds[i].start_time/1000;
-        let end = sr * sounds[i].end_time/1000;
-        buffer = buffer.slice(start, end);
-        streams.push(buffer.toString('base64'));
+
+  console.log(files);
+  async.map(files, fs.readFile, function(err, buffers) {
+    if(err) {
+        throw err;
+    }
+    let streams = [];
+    let semaphore = 0;
+    buffers.forEach(function(buffer, i){
+      semaphore += 1;
+      let encoder = lame.Encoder({
+        channels: 2,
+        bitDepth: 16,
+        sampleRate: 22050,
+        bitRate: 128,
+        outSampleRate: 22050,
+        mode: lame.STEREO,
       });
-
-      var data = {
-        token: token,
-        streams: streams,
-        suggestions: 'natural, human, musical, machine, animal'
-      };
-
-      // Return json response
-      res.json(data);
-
-      // Cache the token and answer for 5 minutes (300 secs)
-      cache.set(token, {
-        timestamp: new Date(Date.now()),
-        answer: {
-          index: sounds.indexOf(known),
-          value: known.labels,
-          synsets: known.synsets
-        },
-        learning: {
-          index: sounds.indexOf(learning),
-          value: learning
-        },
-        attempted: false,
-        solved: false,
+      let decoder = lame.Decoder();
+      decoder.bufs = [];
+      encoder.bufs = [];
+      decoder.on('format', function(format) {
+        this.format = format;
       });
+      decoder.on('data', function(data) {
+        this.bufs.push(data);
+      });
+      decoder.on('end', function() {
+        let buf = Buffer.concat(this.bufs);
+        console.log(buf.length);
+        let sr = this.format.sampleRate;
+        sr = buf.length / 120.06;
+        let start = Math.round(sr * sounds[i].start_time/1000);
+        console.log(start);
+        let end = Math.round(sr * sounds[i].end_time/1000);
+        console.log(end);
+        buf = buf.slice(start, end);
+        console.log(buf.length);
+        encoder.end(buf);
+      });
+      encoder.on('data', function(buffer) {
+        this.bufs.push(buffer);
+      });
+      encoder.on('end', function() {
+        semaphore -= 1;
+        streams[i] = Buffer.concat(this.bufs).toString('base64');
+        if(semaphore <= 0){
+          var data = {
+            token: token,
+            streams: streams,
+            suggestions: 'natural, human, musical, machine, animal'
+          };
+          res.json(data);
+        }
+      });
+      decoder.end(buffer);
     });
+
+
+    // Cache the token and answer for 5 minutes (300 secs)
+    cache.set(token, {
+      timestamp: new Date(Date.now()),
+      answer: {
+        index: sounds.indexOf(known),
+        value: known.labels,
+        synsets: known.synsets
+      },
+      learning: {
+        index: sounds.indexOf(learning),
+        value: learning
+      },
+      attempted: false,
+      solved: false,
+    });
+
   });
 }
 
@@ -148,14 +184,10 @@ export function init(config, db){
           if(semaphore <= 0){
             console.log('finished init');
           }
-          if(synsetids.length <= 0){
-            console.log('empty synset list for: ' + label);
-          }
         }).catch(e => {
           // We will get here if a known label is not recognized by WordNet
           // For now, just remove it from the dataset
           console.log(e);
-          console.log('no synsets found for: ' + label);
           dataset.splice(i, 1);
         });
       });
