@@ -1,8 +1,7 @@
 import fs from 'fs';
-import ffprobe from 'node-ffprobe';
+import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import uuid from 'node-uuid';
-import async from 'async';
 import {random_sample, shuffle} from '../lib/util';
 import {getAllSynsetIDs, getSynsetIDs} from '../lib/wordnet';
 import {get_intersections} from '../lib/sat';
@@ -17,46 +16,60 @@ export function generate(req, res) {
   let files = sounds.map(function(sound){ return sound.filepath });
   console.log(sounds[0].labels);
   console.log(sounds[1].labels);
-  async.map(files, ffprobe, function(err, formats) {
-    async.map(files, fs.readFile, function(err, buffers) {
-      if(err) {
-          throw err;
+  let semaphore = 0;
+  let outstreams = [];
+  files.forEach(function(file, i){
+    semaphore += 1;
+    let ffm = new ffmpeg(file);
+    ffm.seekInput(sounds[i].start_time/1000);
+    ffm.duration(sounds[i].end_time/1000 - sounds[i].start_time/1000);
+    ffm.audioCodec('libmp3lame');
+    ffm.format('mp3');
+    let output = ffm.pipe({ end: true });
+    output.buffers = [];
+    output.on('data', function(b){
+      this.buffers.push(b);
+    });
+    ffm.on('error', function(err, stdout, stderr) {
+      console.log('Cannot process audio file: ' + err.message);
+    });
+    output.on('end', function(stdout, stderr) {
+      console.log('Transcoding succeeded !');
+      let buffer = Buffer.concat(this.buffers);
+      outstreams[i] = buffer.toString('base64');
+      semaphore--;
+      if(semaphore == 0){
+        send_data();
       }
-      let streams = [];
-      buffers.forEach(function(buffer, i){
-        let sr = buffer.length / formats[i].format.duration;
-        let start = sr * sounds[i].start_time/1000;
-        let end = sr * sounds[i].end_time/1000;
-        buffer = buffer.slice(start, end);
-        streams.push(buffer.toString('base64'));
-      });
-
-      var data = {
-        token: token,
-        streams: streams,
-        suggestions: 'natural, human, musical, machine, animal'
-      };
-
-      // Return json response
-      res.json(data);
-
-      // Cache the token and answer for 5 minutes (300 secs)
-      cache.set(token, {
-        timestamp: new Date(Date.now()),
-        answer: {
-          index: sounds.indexOf(known),
-          value: known.labels,
-          synsets: known.synsets
-        },
-        learning: {
-          index: sounds.indexOf(learning),
-          value: learning
-        },
-        attempted: false,
-        solved: false,
-      });
     });
   });
+
+  function send_data(){
+    var data = {
+      token: token,
+      streams: outstreams,
+      suggestions: 'natural, human, musical, machine, animal'
+    };
+
+    // Return json response
+    res.json(data);
+
+    // Cache the token and answer for 5 minutes (300 secs)
+    cache.set(token, {
+      timestamp: new Date(Date.now()),
+      answer: {
+        index: sounds.indexOf(known),
+        value: known.labels,
+        synsets: known.synsets
+      },
+      learning: {
+        index: sounds.indexOf(learning),
+        value: learning
+      },
+      attempted: false,
+      solved: false,
+    });
+  }
 }
 
 export function attempt(req, res) {
