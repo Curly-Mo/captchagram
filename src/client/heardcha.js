@@ -98,7 +98,7 @@ class Heardcha{
     // Overlay
     let overlay = document.createElement('div');
     overlay.classList.add('captcha-overlay');
-    overlay.innerHTML = 'Are you Human?';
+    overlay.innerHTML = '';
     this.overlay = overlay;
     overlay.addEventListener('click', function(e){
       captcha.items[0].content.click();

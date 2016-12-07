@@ -1,217 +1,137 @@
-import wordNet from 'wordnet-magic';
+import SpellChecker from 'spellchecker';
+import natural from 'natural';
+let tokenizer = new natural.WordTokenizer();
+let wordnet = new natural.WordNet();
+import magic from 'wordnet-magic';
+let wn = magic('data/wordnet.db');
 
-var wn = wordNet('data/wordnet.db');
-
-export function getSynsetIDs(label){
-  let word = new wn.Word(label);
-  let result = word.getSynsets().then(synsets => {
-    let ids = synsets.map(synset => {
-      return synset.synsetid
-    });
-    return ids;
-  });
-  return result;
-}
-
-export function getAllSynsetIDs(label){
-  let result = getAllSynsets(label).then(synsets => {
-    let ids = synsets.map(synset => {
-      return synset.synsetid
-    });
-    return ids;
-  });
-  return result;
-}
-
-function getAllSynsets(label){
-  let word = new wn.Word(label);
-  let result = word.getSynsets().then(synsets => {
-    let promises = [];
-    synsets.forEach(synset => {
-      let hypernyms = synset.getHypernymsTree().then(parents => {
-        let sets = [];
-        parents.forEach(tree => {
-          sets = sets.concat(parse_tree(tree, 'hypernym'));
-        });
-        return sets;
+export function lookup(label, callback){
+  label = label.toLowerCase();
+  wn.morphy(label).then(function(morphy){
+    if(morphy.length > 0){
+      label = morphy[0].lemma;
+      wordnet.lookup(label, function(results){
+        callback(results);
       });
-      let hyponyms = synset.getHyponymsTree().then(children => {
-        let sets = [];
-        children.forEach(tree => {
-          sets = sets.concat(parse_tree(tree, 'hyponym'));
-        });
-        return sets;
-      });
-      promises.push(hypernyms);
-      promises.push(hyponyms);
-    });
-    promises.push(synsets);
-    let promise = Promise.all(promises);
-    promise = promise.then(values => {
-      values = [].concat.apply([], values);
-      return values;
-    });
-    return promise;
-  });
-  return result;
-}
-
-export function getHypernymIDs(label){
-  let result = getHypernyms(label).then(synsets => {
-    let ids = synsets.map(synset => {
-      return synset.synsetid
-    });
-    return ids;
-  });
-  return result;
-}
-
-function getHypernyms(label){
-  let word = new wn.Word(label);
-  let result = word.getSynsets().then(synsets => {
-    let promises = [];
-    synsets.forEach(synset => {
-      let hypernyms = synset.getHypernymsTree().then(parents => {
-        let sets = [];
-        parents.forEach(tree => {
-          sets = sets.concat(parse_tree(tree, 'hypernym'));
-        });
-        return sets;
-      });
-      promises.push(hypernyms);
-    });
-    promises.push(synsets);
-    let promise = Promise.all(promises);
-    promise = promise.then(values => {
-      values = [].concat.apply([], values);
-      return values;
-    });
-    return promise;
-  });
-  return result;
-}
-
-
-export function areRelated(label1, label2){
-  let synsets1 = getSynsetIDs(label1);
-  let synsets2 = getAllSynsetIDs(label2);
-  let promise = Promise.all([synsets1, synsets2]);
-  promise = promise.then(values => {
-    let synsets1 = values[0];
-    let synsets2 = values[1];
-    console.log(synsets1);
-    console.log(synsets2);
-    let found = false;
-    for(let i=0; i<synsets1.length; i++){
-      if(synsets2.indexOf(synsets1[i]) > 0){
-        found = true;
-        break
-      }
-    }
-    if(found){
-      return true;
     }else{
-      throw 'Not related';
+      let tokens = tokenizer.tokenize(label);
+      let semaphore = 0;
+      let results = new Set();
+      tokens.forEach(function(token){
+        semaphore += 1;
+        if(SpellChecker.isMisspelled(token)){
+          let corrections = SpellChecker.getCorrectionsForMisspelling(token);
+          if(corrections.length > 0){
+            token = corrections[0].toLowerCase();
+          }
+        }
+        wn.morphy(token).then(function(morphed){
+          semaphore -= 1;
+          if(morphed.length > 0){
+            semaphore += 1;
+            token = morphed[0].lemma;
+            wordnet.lookup(token, function(synsets){
+              semaphore -= 1;
+              synsets.forEach(function(synset){
+                results.add(synset);
+              });
+              if(semaphore == 0){
+                callback(Array.from(results));
+              }
+            });
+          }else{
+            console.log('bad:' + token);
+            if(semaphore == 0){
+              callback(Array.from(results));
+            }
+          }
+        });
+      });
     }
   });
-  return promise;
 }
 
-export function isHypernymOf(child, parent){
-  if(typeof parent === 'string'){
-    parent = new wn.Word(parent);
-  }
-  if(parent instanceof wn.Word){
-    let result = parent.getSynsets().then(function(data){
-      return isHypernymOf(child, data);
-    });
-    return result;
-  }
-  if(typeof child === 'string'){
-    child = new wn.Word(child);
-  }
-  if(child instanceof wn.Word){
-    let result = child.getSynsets().then(function(data){
-      let promises = data.map(function(synset){return isHypernymOfSynset(synset, parent)});
-      let promise = Promise.any(promises);
-      return promise;
-    });
-    return result;
-  }
-  if(child instanceof wn.Synset){
-    return isHypernymOfSynset(child, parent);
-  }
-  throw 'Unkown input types';
-}
-
-function isHypernymOfSynset(child, parent){
-  let promise = child.getHypernymsTree().then(function(data){
-    let hypernyms = [child.synsetid];
-    data.forEach(function(synset){
-      hypernyms = hypernyms.concat(parse_tree(synset, 'hypernym'));
-    });
-    if(!(parent instanceof Array)){
-      parent = [parent];
+export function lookup_related(label, callback){
+  let synsets = new Set();
+  let related_synsets = new Set();
+  let semaphore = 0;
+  lookup(label, function(results){
+    results.forEach(function(result){
+      semaphore += 1;
+      synsets.add(result);
+      get_related(result, function(related){
+        semaphore -= 1;
+        related.forEach(function(related_synset){
+          related_synsets.add(related_synset);
+        });
+        if(semaphore == 0){
+          callback(Array.from(synsets), Array.from(related_synsets));
+        }
+      });
+    }); 
+    if(semaphore == 0){
+      callback(Array.from(synsets), Array.from(related_synsets));
     }
-    let found = false;
-    parent.forEach(function(p){
-      if(hypernyms.indexOf(p.synsetid) >= 0){
-        found = true;
+  });
+}
+
+function get_related(synset, callback){
+  let related_synsets = new Set();
+  let semaphore = 0;
+  synset.ptrs.forEach(function(pointer){
+    semaphore += 1;
+    wordnet.get(pointer.synsetOffset, pointer.pos, function(related){
+      semaphore -= 1;
+      let syn_id = related.synsetOffset.toString();
+      related_synsets.add(related);
+      if(pointer.pointerSymbol == '@' || pointer.pointerSymbol == '@i'){
+        semaphore += 1;
+        get_hyponyms_tree(related, 2, function(hyponyms){
+          semaphore -= 1;
+          hyponyms.forEach(function(hyponym){
+            related_synsets.add(hyponym);
+          });
+          if(semaphore == 0){
+            callback(Array.from(related_synsets));
+          }
+        });
+      }
+      if(semaphore == 0){
+        callback(Array.from(related_synsets));
       }
     });
-    if(found){
-      return Promise.resolve();
-    }else{
-      return Promise.reject('Parent is not a hypernym of child');
-    }
-  }).catch(function(e){
-    return Promise.reject(e);
   });
-  return promise;
-}
-
-function parse_tree(synset, key){
-  let items = [synset];
-  if(synset[key] != null){
-    synset[key].forEach(function(next){
-      items = items.concat(parse_tree(next, key));
-    });
+  if(semaphore == 0){
+    callback(Array.from(related_synsets));
   }
-  return items;
 }
 
-Promise.any = function(arrayOfPromises) {
-  // For each promise that resolves or rejects, 
-  // make them all resolve.
-  // Record which ones did resolve or reject
-  var resolvingPromises = arrayOfPromises.map(function(promise) {
-    return promise.then(function(result) {
-      return {
-        resolve: true,
-        result: result
-      };
-    }, function(error) {
-      return {
-        resolve: false,
-        result: error
-      };
-    });
-  });
-  return Promise.all(resolvingPromises).then(function(results) {
-    // Count how many passed/failed
-    var passed = [], failed = [], allFailed = true;
-    results.forEach(function(result) {
-      if(result.resolve) {
-        allFailed = false;
-      }
-      passed.push(result.resolve ? result.result : null);
-      failed.push(result.resolve ? null : result.result);
-    });
-
-    if(allFailed) {
-      return Promise.reject(failed);
-    } else {
-      return passed;
+function get_hyponyms_tree(synset, depth=-1, callback){
+  let hyponyms = [];
+  let semaphore = 0;
+  if(depth == 0){
+    callback(hyponyms);
+    return;
+  }
+  synset.ptrs.forEach(function(ptr){
+    let symbol = ptr.pointerSymbol;
+    if(symbol == '~' || symbol == '~i'){
+      semaphore += 1;
+      wordnet.get(ptr.synsetOffset, ptr.pos, function(hyponym){
+        hyponyms.push(hyponym);
+        get_hyponyms_tree(hyponym, depth-1, function(nested_hyponyms){
+          semaphore -= 1;
+          hyponyms = hyponyms.concat(nested_hyponyms);
+          if(semaphore == 0){
+            callback(hyponyms);
+            return;
+          }
+        });
+      });
     }
   });
-};
+  if(semaphore == 0){
+    callback(hyponyms);
+    return;
+  }
+}

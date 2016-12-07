@@ -3,8 +3,8 @@ import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import uuid from 'node-uuid';
 import {random_sample, shuffle} from '../lib/util';
-import {getAllSynsetIDs, getSynsetIDs} from '../lib/wordnet';
 import {get_intersections} from '../lib/sat';
+import * as wordnet from '../lib/wordnet';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({stdTTL: 300});
 
@@ -14,8 +14,12 @@ export function generate(req, res) {
   let learning = random_sample(global.dataset, 1);
   let sounds = shuffle([known, learning]);
   let files = sounds.map(function(sound){ return sound.filepath });
+  //console.log(sounds[0].lemmas);
   console.log(sounds[0].labels);
+  //console.log(sounds[0].related_lemmas);
+  //console.log(sounds[1].lemmas);
   console.log(sounds[1].labels);
+  //console.log(sounds[1].related_lemmas);
   let semaphore = 0;
   let outstreams = [];
   files.forEach(function(file, i){
@@ -45,10 +49,17 @@ export function generate(req, res) {
   });
 
   function send_data(){
+    let index = sounds.indexOf(known);
+    let dev = [
+      sounds[0].labels.join(', '),
+      sounds[1].labels.join(', '),
+    ];
+    dev[index] = 'required: ' + dev[index];
     var data = {
       token: token,
       streams: outstreams,
-      suggestions: 'natural, human, musical, machine, animal'
+      suggestions: 'natural, human, musical, machine, animal',
+      'For devs': dev,
     };
 
     // Return json response
@@ -59,8 +70,10 @@ export function generate(req, res) {
       timestamp: new Date(Date.now()),
       answer: {
         index: sounds.indexOf(known),
-        value: known.labels,
-        synsets: known.synsets
+        lemmas: known.lemmas,
+        synsets: known.synset_ids,
+        related_synsets: known.synset_ids,
+        related_lemmas: known.related_lemmas,
       },
       learning: {
         index: sounds.indexOf(learning),
@@ -79,19 +92,23 @@ export function attempt(req, res) {
     let actual = cache.get(token, true);
     actual.attempted = true;
     let timestamp = actual.timestamp;
+    let actual_ids = actual.answer.synsets.map(Number);
+    let related_ids = actual.answer.related_synsets.map(Number);
     let errors = [];
     let user_answer = req.body['answer'+actual.answer.index].trim();
     // Use wordnet to test if user answer is a child of the actual label
-    getSynsetIDs(user_answer).then(synset_ids => {
-      let found = false;
-      let actual_ids = actual.answer.synsets.map(Number);
-      for(let i=0; i<synset_ids.length; i++){
-        if(actual_ids.indexOf(synset_ids[i]) > 0){
-          found = true;
-          break
-        }
-      }
-      if(found){
+    wordnet.lookup(user_answer, function(results){
+      let synset_ids = [];
+      results.forEach(function(result){
+        synset_ids.push(result.synsetOffset);
+        result.ptrs.forEach(function(pointer){
+          synset_ids.push(pointer.synsetOffset);
+        });
+      });
+      let match = synset_ids.some(function(v) {
+        return actual_ids.indexOf(v) >= 0 || related_ids.indexOf(v) >= 0;
+      });
+      if(match){
         response = {
           "success": true,
           "challenge_ts": timestamp.toISOString(),
@@ -103,21 +120,20 @@ export function attempt(req, res) {
         // let other_index = (actual.answer.index + 1) % 2;
         // user_answer = req.body['answer'+other_index];
         // save_response(actual.learning, user_answer);
+
       }else{
-        throw 'User response is not related to known label';
+        errors.push('Incorrect answer');
+        response = {
+          "success": false,
+          "challenge_ts": timestamp.toISOString(),
+          "hostname": req.headers.host,
+          "error-codes": errors
+        };
+        res.json(response);
       }
-    }).catch(function(e){
-      errors.push('Incorrect answer');
-      response = {
-        "success": false,
-        "challenge_ts": timestamp.toISOString(),
-        "hostname": req.headers.host,
-        "error-codes": errors
-      };
-      res.json(response);
     });
-  // Update the cache, to mark it has been attempted and therefore no longer valid
-  cache.set(token, actual);
+    // Update the cache, to mark it has been attempted and therefore no longer valid
+    cache.set(token, actual);
   }catch(e){
     response = {
       success: false,
@@ -145,7 +161,7 @@ export function verify(req) {
 
 global.dataset = [];
 export function init(config, db){
-  console.log('initializing dataset wordnet synsets...');
+  console.log('initializing dataset'); 
   // Fake datasets until we have database integration
   get_intersections(db, function(dataset){
     // Get all synsetids for the known labels
@@ -153,25 +169,6 @@ export function init(config, db){
     global.dataset = dataset;
     let semaphore = 0;
     dataset.forEach(function(item, i){
-      item.labels.forEach(function(label){
-        semaphore += 1;
-        getAllSynsetIDs(label).then(synsetids => {
-          item.synsets = (item.synsets || []).concat(synsetids);
-          semaphore-=1;
-          if(semaphore <= 0){
-            console.log('finished init');
-          }
-          if(synsetids.length <= 0){
-            console.log('empty synset list for: ' + label);
-          }
-        }).catch(e => {
-          // We will get here if a known label is not recognized by WordNet
-          // For now, just remove it from the dataset
-          console.log(e);
-          console.log('no synsets found for: ' + label);
-          dataset.splice(i, 1);
-        });
-      });
       item.filepath = path.join(config.audioDir, item.file_name);
     });
   });

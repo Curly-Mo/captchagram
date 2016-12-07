@@ -43,9 +43,12 @@
     "form-data": "^2.1.0",
     "fs": "0.0.1-security",
     "memory-streams": "^0.1.0",
+    "natural": "^0.4.0",
     "node-cache": "^4.1.0",
     "node-uuid": "^1.4.7",
     "resource-router-middleware": "^0.6.0",
+    "spellchecker": "^3.3.1",
+    "wordnet-db": "^3.1.2",
     "wordnet-magic": "^0.3.0"
   },
   "devDependencies": {
