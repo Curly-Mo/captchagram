@@ -8,7 +8,7 @@ let MAX_DURATION = 20000;
 // Remove intersections with less than MIN_EVENTS
 let MIN_EVENTS = 3;
 // Count intersections within +/-ONSET_THRESH in milliseconds
-let ONSET_THRESH = 1000;
+let ONSET_THRESH = 1200;
 // Count intersections within +/-DURATION_RATIO_THRESH
 let DURATION_RATIO_THRESH = 0.6;
 // Add ONSET_OFFSET to intersection onsets in milliseconds
@@ -56,7 +56,9 @@ function find_intersections(events){
     let id = ids.sort().join('');
     deduped[id] = cluster;
   });
-  deduped = Object.values(deduped);
+  deduped = Object.keys(deduped).map(function(key) {
+    return deduped[key];
+  });
 
   return deduped;
 }
@@ -77,7 +79,7 @@ function label_filter(cluster, min_count, callback) {
     };
     setTimeout(function(){
       callback(result);
-    }, 200);
+    }, 1000);
     return;
   }
   let synset_counts = {};
@@ -88,6 +90,7 @@ function label_filter(cluster, min_count, callback) {
     event.lemmas = new Set();
     event.related_ids = new Set();
     event.related_lemmas = new Set();
+    event.agreed_labels = {};
     let labels = event.translation;
     if(labels == ''){
       labels = event.description;
@@ -138,6 +141,7 @@ function label_filter(cluster, min_count, callback) {
           synset.synonyms.forEach(function(lemma){
             event.lemmas.add(lemma);
           });
+          event.agreed_labels[syn_id] = (event.agreed_labels[syn_id] || []).concat([labels[i]]);
         });
         related.forEach(function(synset){
           let syn_id = synset.synsetOffset.toString();
@@ -148,14 +152,17 @@ function label_filter(cluster, min_count, callback) {
           synset.synonyms.forEach(function(lemma){
             event.related_lemmas.add(lemma);
           });
+          event.agreed_labels[syn_id] = (event.agreed_labels[syn_id] || []).concat([labels[i]]);
         });
         if(semaphore == 0){
           filter(synset_counts, callback);
+          return;
         }
       });
     }
     if(semaphore == 0){
       filter(synset_counts, callback);
+      return;
     }
   });
 
@@ -166,6 +173,7 @@ function label_filter(cluster, min_count, callback) {
     let lemmas = new Set();
     let related_ids = new Set();
     let related_lemmas = new Set();
+    let agreed_labels = new Set();
     Object.keys(synset_counts).forEach(function (synset_id) {
       let count = synset_counts[synset_id];
       if(count >= min_count){
@@ -188,6 +196,9 @@ function label_filter(cluster, min_count, callback) {
             event.related_lemmas.forEach(function(lemma){
               related_lemmas.add(lemma);
             });
+            (event.agreed_labels[synset_id] || []).forEach(function(label){
+              agreed_labels.add(label);
+            });
           }
         });
       }
@@ -199,6 +210,7 @@ function label_filter(cluster, min_count, callback) {
       'labels': Array.from(labels),
       'lemmas': Array.from(lemmas),
       'related_lemmas': Array.from(related_lemmas),
+      'agreed_labels': Array.from(agreed_labels),
     };
     callback(result);
   }
@@ -210,7 +222,7 @@ export function get_intersections(db, callback){
       FROM events 
       JOIN segments ON segments.seg_id = events.seg_id
       ORDER BY events.start_time ASC
-      `, function(err, rows, fields) {
+  `, function(err, rows, fields) {
     if (err){
       console.log(err);
     }
@@ -224,7 +236,7 @@ export function get_intersections(db, callback){
     });
     let filtered = [];
     let semaphore = 0;
-    intersections.forEach(function(intersection, i){
+    intersections.forEach(function(intersection){
       semaphore += 1;
       label_filter(intersection, MIN_EVENTS, function(label_filtered){
         semaphore -= 1;
@@ -233,7 +245,10 @@ export function get_intersections(db, callback){
           filtered.push(label_filtered);
         }
         if(semaphore == 0){
-          merge_events(filtered, callback);
+          merge_events(filtered, function(events){
+            post(db, events);
+            callback(events);
+          });
         }
       });
     });
@@ -249,39 +264,57 @@ function merge_events(filtered, callback){
     let start_total = 0;
     let dur_total = 0;
     item.events.forEach(function(event){
-      event_ids.push(event.event_id);
+      event_ids.push(parseInt(event.event_id));
       start_total += event.start_time;
       dur_total += event.end_time - event.start_time;
     });
     let start_time = start_total / item.events.length + ONSET_OFFSET;
     let duration = dur_total / item.events.length;
     let end_time = start_time + duration;
-    event_ids.sort();
+    event_ids.sort(function(a, b){return a - b});
     let obj = {
-      id: parseInt(event_ids.join('')),
-      event_ids: event_ids,
+      event_ids: event_ids.join(';'),
       start_time: start_time,
       end_time: end_time,
-      file_name: item.events[0].file_name,
-      labels: item.labels,
-      synset_ids: item.synset_ids,
-      related_synset_ids: item.related_ids,
-      lemmas: item.lemmas,
-      related_lemmas: item.related_lemmas,
+      seg_id: item.events[0].seg_id,
+      labels: item.labels.join(';'),
+      agreed_labels: item.agreed_labels.join(';'),
+      synset_ids: item.synset_ids.join(';'),
+      related_synset_ids: item.related_ids.join(';'),
+      lemmas: item.lemmas.join(';'),
     }
     event_objects.push(obj);
   });
   //console.log(event_objects);
   event_objects.forEach(function(e){
-    console.log('id: ' + e.id);
     console.log('size: ' + e.event_ids.length);
     console.log('labels: ' + e.labels);
+    console.log('good: ' + e.agreed_labels);
     console.log('lemmas: ' + e.lemmas);
   });
   console.log('total intersections:');
   console.log(event_objects.length);
 
   callback(event_objects);
+}
+
+function post(db, events){
+  var query = db.query('TRUNCATE TABLE intersections', function(err, result) {
+    if(err){
+      console.log(err);
+    }
+    if(result){
+      console.log(result);
+    }
+  });
+  events.forEach(function(intersection){
+    var query = db.query('INSERT INTO intersections SET ?', intersection, function(err, result) {
+      if(err){
+        console.log(err);
+      }
+    });
+  });
+
 }
 
 function isNumeric(n) {

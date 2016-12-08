@@ -4,7 +4,7 @@ import * as captcha from './captcha';
 
 export default ({ config, db }) => {
 	let api = Router();
-  captcha.init(config, db);
+  //captcha.init(config, db);
 
   // Index route, probably something like a homepage
 	api.get('/', (req, res) => {
@@ -13,10 +13,10 @@ export default ({ config, db }) => {
 
   // Captcha routes
 	api.get('/generate', function(req, res){
-    captcha.generate(req, res);
+    captcha.generate(req, res, db, config);
   });
 	api.post('/attempt', function(req, res){
-    let response = captcha.attempt(req, res);
+    let response = captcha.attempt(req, res, db);
   });
 	api.post('/verify', function(req, res){
     let response = captcha.verify(req);
