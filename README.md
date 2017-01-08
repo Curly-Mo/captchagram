@@ -37,8 +37,8 @@ src/config.json
   "bodyLimit": "100kb",
   "corsHeaders": ["Link"],
   "audioDir": "Directory where audio files live on server",
-  "user": "username",
-  "password": "password"
+  "user": "sql username",
+  "password": "sql password"
 }
 ```
 
