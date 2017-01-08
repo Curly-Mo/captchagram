@@ -1,3 +1,4 @@
+"use strict";
 window.addEventListener('load', init);
 
 function init(){
@@ -19,6 +20,7 @@ class Heardcha{
     this.items = [];
     this.form = this.generate_ui();
     this.container.appendChild(this.form);
+    this.attempts = 0;
     this.requestChallenge();
   }
 
@@ -72,39 +74,60 @@ class Heardcha{
     info.title = 'Help';
     info.addEventListener('click', function(e){
       e.preventDefault();
+      if(captcha.about == true){
+        captcha.about = false;
+        captcha.overlay.style.display = 'none';
+      }else{
+        captcha.about = true;
+        captcha.overlay.innerHTML = `<b>About</b>: Heardcha is CAPTCHA using sounds instead of images. The user is asked to type/describe the sound being heard and Heardcha checks whether the user is a robot. More about <a href="http://www.captcha.net/" target="_blank">CAPTCHA</a>.<br><b>How to use</b>: Type a word or words that best describe what you are hearing in each box: 2 sounds will be played. Clicking on "need help" will provide you will suggested words for the sound that is being heard. The words, however, are suggestions and should not be considered correct answers.`;
+        captcha.overlay.style.display = 'block';
+        captcha.overlay.style.backgroundColor = 'white';
+        captcha.overlay.classList.add('captcha-no-pseudo');
+      }
     });
     options.appendChild(info);
     upper_right.appendChild(options);
     // Logo
-    let logo = document.createElement('div');
+    let logo = document.createElement('a');
+    logo.href = 'http://citygram.smusic.nyu.edu/';
+    logo.target = '_blank';
     logo.classList.add('captcha-col2');
     logo.classList.add('captcha-logo');
-    logo.innerHTML = 'HeardCha';
+    let logo_text = document.createElement('div');
+    logo_text.innerHTML = 'HeardCha';
+    logo.appendChild(logo_text);
     upper_right.appendChild(logo);
 
-    let cg_link = document.createElement('a');
-    cg_link.href = 'http://citygram.smusic.nyu.edu/';
-    cg_link.target = '_blank';
     let cg_logo = document.createElement('img');
     cg_logo.src = '/client/img/logo.png';
-    cg_link.appendChild(cg_logo);
     cg_logo.classList.add('captcha-cg-logo');
-    lower_right.appendChild(cg_link);
+    logo.appendChild(cg_logo);
 
     let submit = document.createElement('input');
+    submit.classList.add('captcha-wrapper');
+    submit.classList.add('captcha-submit');
+    submit.classList.add('disabled');
     submit.type = 'submit';
-    form.appendChild(submit);
+    lower_right.appendChild(submit);
+
 
     // Overlay
     let overlay = document.createElement('div');
     overlay.classList.add('captcha-overlay');
-    overlay.innerHTML = '';
     this.overlay = overlay;
     overlay.addEventListener('click', function(e){
       captcha.items[0].content.click();
       this.style.display = 'none';
     });
     main.appendChild(overlay);
+    // About
+    let about = document.createElement('div');
+    about.classList.add('captcha-about');
+    this.about = about;
+    about.addEventListener('click', function(e){
+      this.style.display = 'none';
+    });
+    about.innerHTML = `<b>About</b>: Heardcha is CAPTCHA using sounds instead of images. The user is asked to type/describe the sound being heard and Heardcha checks whether the user is a robot. More about CAPTCHA <a href="http://www.captcha.net/">CAPTCHA</a>.<br><b>How to use</b>: Type a word or words that best describe what you are hearing in each box: 2 sounds will be played. Clicking on "need help" will provide you will suggested words for the sound that is being heard. The words, however, are suggestions and should not be considered correct answers.`
 
     this.main = main;
 
@@ -135,17 +158,31 @@ class Heardcha{
     let source = this.context.createBufferSource(1);
     source.connect(this.context.destination);
     let play_button = document.createElement('span');
-    play_button.innerHTML = '\u25B6';
+    play_button.innerHTML = '\u25BA';
     play_button.title = 'Play';
     play_button.classList.add('captcha-play-button');
 
-    let answer = document.createElement('input');
-    answer.type = 'text';
-    answer.name = 'answer'+i;
-    answer.required = true;
-    let nth = ['First', 'Second', 'Third', 'Fourth'];
-    answer.placeholder = nth[i] + ' sound';
-    answer.classList.add('captcha-textbox');
+    let answer = document.createElement('div');
+    let suggestions = document.createElement('div');
+    suggestions.classList.add('captcha-suggestions');
+    let input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'answer'+i;
+    input.required = true;
+    input.placeholder = 'Type what you hear';
+    input.maxLength = 60;
+    input.classList.add('captcha-textbox');
+    input.addEventListener('input', function(){
+      let fields = this.form.querySelectorAll('input:required');
+      for(let i=0; i < fields.length; i++) {
+        if(fields[i].value == ''){
+          return;
+        }
+      }
+      this.form.querySelector('.captcha-submit').classList.remove('disabled');
+    });
+    answer.appendChild(suggestions);
+    answer.appendChild(input);
 
     let scriptNode = captcha.context.createScriptProcessor(1024, 1, 1);
     let item = {
@@ -154,10 +191,13 @@ class Heardcha{
       scriptNode: scriptNode,
       button: play_button,
       answer: answer,
+      suggestions: suggestions,
+      input: input,
       playing: false
     }
 
     let canvas = document.createElement('canvas');
+    canvas.height = canvas.height * 0.8;
     canvas.classList.add('captcha-canvas');
     let canvas_ctx= canvas.getContext("2d");
     content.appendChild(canvas);
@@ -195,7 +235,7 @@ class Heardcha{
       }
       // create the meter
       canvas_ctx.fillStyle = gradient;
-      canvas_ctx.fillRect(canvas.width*0.25, canvas.height, canvas.width*0.5, -rms*1000);
+      canvas_ctx.fillRect(canvas.width*0.2, canvas.height, canvas.width*0.6, -rms*1000);
     }
     scriptNode.connect(captcha.context.destination);
 
@@ -207,7 +247,7 @@ class Heardcha{
         item.playing = false;
         item.source.stop();
         captcha.init_source(item, item.source.buffer);
-        button.innerHTML = '\u25B6';
+        button.innerHTML = '\u25BA';
         button.title = 'Play';
       }else{
         item.playing = true;
@@ -217,7 +257,7 @@ class Heardcha{
             other.source.stop();
             other.playing = false;
             captcha.init_source(other, other.source.buffer);
-            other.button.innerHTML = '\u25B6';
+            other.button.innerHTML = '\u25BA';
             other.button.title = 'Play';
           }
         }
@@ -226,7 +266,7 @@ class Heardcha{
         button.innerHTML = '\u25FC';
         button.title = 'Stop Audio';
       }
-      item.answer.focus();
+      item.input.select();
     });
 
     return item;
@@ -260,12 +300,14 @@ class Heardcha{
         }, 500);
       }
     }
-    let formdata = new FormData(this.form);
-    formdata.append('token', captcha.token);
+    let inputs = this.form.querySelectorAll('input');
     let data = {};
-    for(let pair of formdata){
-      data[pair[0]] = pair[1];
+    for(let i=0; i<inputs.length; i++){
+      if(inputs[i].name != ''){
+        data[inputs[i].name] = inputs[i].value;
+      }
     }
+    data['token'] = captcha.token;
     data = JSON.stringify(data);
     console.log(data);
     let url = '/captcha/attempt';
@@ -276,7 +318,10 @@ class Heardcha{
 
     // Visual Feedback
     let height = captcha.main.clientHeight;
-    captcha.main.innerHTML = '';
+    let items = captcha.main.querySelectorAll('.captcha-wrapper');
+    for(let i=0; i<items.length; i++){
+      captcha.main.removeChild(items[i]);
+    }
     let feedback = document.createElement('div');
     feedback.classList.add('captcha-wrapper');
     feedback.classList.add('captcha-feedback-wrapper');
@@ -293,32 +338,48 @@ class Heardcha{
     text.innerHTML = 'Are you Human?';
     feedback.appendChild(text);
     captcha.main.appendChild(feedback);
+    captcha.feedback = feedback;
   }
 
   requestChallenge(callback){
+    this.attempts += 1;
     let captcha = this;
-
-    let xhr = new XMLHttpRequest();
-    xhr.onload = function(e){
-      let response = xhr.response;
-      console.log(response);
+    let height = captcha.main.clientHeight;
+    let items = captcha.main.querySelectorAll('.captcha-wrapper');
+    for(let i=0; i<items.length; i++){
+      captcha.main.removeChild(items[i]);
+    }
+    let wrapper = document.createElement('div');
+    wrapper.classList.add('captcha-wrapper');
+    wrapper.classList.add('captcha-feedback-wrapper');
+    wrapper.classList.add('captcha-grid');
+    wrapper.style.height = height - 6.4;
+    let loader = document.createElement('div');
+    loader.classList.add('captcha-loader');
+    wrapper.appendChild(loader);
+    captcha.main.appendChild(wrapper);
+    if(captcha.items.length > 0){
       for(let i=0; i<captcha.items.length; i++){
         let item = captcha.items[i];
         if(item.playing){
           item.source.stop();
         }
+        item.source.disconnect();
+        item.answer.value = '';
+        item.playing = false;
+        item.button.innerHTML = '\u25BA';
+        item.button.title = 'Play';
       }
+    }
 
+    let xhr = new XMLHttpRequest();
+    xhr.onload = function(e){
+      let response = xhr.response;
+      console.log(response);
       captcha.token = response.token;
-
-      if(captcha.items.length > 0){
-        captcha.main.innerHTML = '';
-        for(let i=0; i<captcha.items.length; i++){
-          let item = captcha.items[i];
-          item.source.disconnect();
-          item.answer.value = '';
-          item.playing = false;
-        }
+      let items = captcha.main.querySelectorAll('.captcha-wrapper');
+      for(let i=0; i<items.length; i++){
+        captcha.main.removeChild(items[i]);
       }
       let upper = document.createElement('div');
       let lower = document.createElement('div');
@@ -328,9 +389,31 @@ class Heardcha{
       captcha.main.appendChild(upper);
       captcha.main.appendChild(lower);
 
-      let instructions = document.createElement('span');
-      instructions.innerHTML = 'Type what you hear:';
-      lower.appendChild(instructions);
+      let help = document.createElement('span');
+      help.innerHTML = 'need help?';
+      help.classList.add('captcha-help');
+      help.classList.add('captcha-suggestion');
+      help.addEventListener('click', function(e){
+        if(this.classList.contains('captcha-suggestion')){
+          for(let i=0; i<captcha.items.length; i++){
+            let suggest = captcha.items[i].suggestions;
+            suggest.style.minHeight = '3em';
+          }
+          this.innerHTML = '<span>Suggestions:</span><span class="captcha-close-button">x</span>';
+          this.classList.remove('captcha-suggestion');
+        }else{
+          for(let i=0; i<captcha.items.length; i++){
+            let suggest = captcha.items[i].suggestions;
+            suggest.style.minHeight = 0;
+          }
+          this.innerHTML = 'need help?';
+          this.classList.add('captcha-suggestion');
+        }
+      });
+      lower.appendChild(help);
+      if(captcha.attempts > 1){
+        help.click();
+      }
 
       let answers = document.createElement('div');
       answers.classList.add('captcha-grid');
@@ -348,7 +431,24 @@ class Heardcha{
         wrapper.appendChild(item.content);
         upper.appendChild(wrapper);
         item.answer.classList.add('captcha-col'+response.streams.length);
+        item.input.value = '';
         answers.appendChild(item.answer);
+
+        item.suggestions.innerHTML = '';
+        for(let s=0; s<response.suggestions[i].length; s++){
+          let value = response.suggestions[i][s];
+          let label = document.createElement('span');
+          label.innerHTML = value;
+          label.classList.add('captcha-suggestion');
+          label.addEventListener('click', function(e){
+            item.input.value = value;
+            item.input.focus();
+          });
+          item.suggestions.appendChild(label);
+          if(s < response.suggestions[i].length-1){
+            item.suggestions.appendChild(document.createTextNode(', '));
+          }
+        }
 
         let data = _base64ToArrayBuffer(response.streams[i]);
         captcha.context.decodeAudioData(data, function(buffer){
@@ -366,6 +466,9 @@ class Heardcha{
         },function(e){
           console.log(e);
         });
+      }
+      if(captcha.attempts <= 1){
+        captcha.main.appendChild(captcha.overlay);
       }
       //let suggestions = document.createElement('div');
       //suggestions.innerHTML = 'Eg. ' + response.suggestions;
@@ -387,7 +490,7 @@ class Heardcha{
     item.source.buffer = buffer;
     item.source.onended = function(){
       item.playing = false;
-      item.button.innerHTML = '\u25B6';
+      item.button.innerHTML = '\u25BA';
       captcha.init_source(item, item.source.buffer);
       if (callback) callback(item);
     }
@@ -430,6 +533,7 @@ function set_style(){
       width: 70%;
       color: #FFFFFF;
       font-weight: bold;
+      text-decoration: none;
     }
     .captcha-cg-logo{
       width: 100%;
@@ -442,6 +546,8 @@ function set_style(){
       bottom: 0;
       right: 0;
       padding: 0.2em;
+      font-size: 1.5em;
+      cursor: pointer;
     }
     .captcha-canvas{
       width: 100%;
@@ -456,6 +562,31 @@ function set_style(){
       width: 100%;
       border: 1.5px solid;
       padding: 0.2em;
+      margin-top: 0.2em;
+    }
+    .captcha-textbox:not(:focus)::-webkit-input-placeholder{
+      color: transparent;
+    }
+    .captcha-suggestions{
+      line-height: 1.5em;
+      min-height: 0;
+      height: 0;
+      max-height: 3em;
+      color: grey;
+      transition:min-height 0.5s ease-out;
+      moz-transition:min-height 0.5s ease-out;
+      webkit-transition:min-height 0.5s ease-out;
+      overflow:hidden;
+    }
+    .captcha-suggestion{
+      color: #779ECB;
+      cursor: pointer;
+    }
+    .captcha-suggestion:focus, .captcha-suggestion:hover{
+      color: #0079ff;
+    }
+    .captcha-help{
+      line-height: 1.0em;
     }
     .captcha-wrapper{
       padding: 0.2em;
@@ -473,19 +604,18 @@ function set_style(){
       top: 0;
       bottom: 0;
       background-color: rgba(0, 0, 0, 0.8);
+      border-radius: 5px;
+      padding: 0.1em;
       z-index: 999;
-      font-size: 3em;
-      color: #000000;
-      text-align: center;
-      text-shadow: -1px 0 white, 0 1px white, 1px 0 white, 0 -1px white;
+      font-size: 1em;
       cursor: pointer;
     }
     .captcha-overlay:before {
       content: '';
       font-size: medium;
       position: absolute;
-      width: 9em;
-      height: 9em;
+      width: 8em;
+      height: 8em;
       border-radius: 50%;
       border: 0.6em solid #ffffff;
       transition: all 0.3s;
@@ -520,6 +650,7 @@ function set_style(){
       -moz-transform: scale(1.1);
     }
     .captcha-feedback-text {
+      width: 60%;
       font-size: 2em;
       margin: auto;
     }
@@ -529,7 +660,6 @@ function set_style(){
     .captcha-feedback-wrapper{
       display: flex;
       padding: 0;
-      width: 100%;
       position: relative;
       align-items: center;
     }
@@ -823,6 +953,82 @@ function set_style(){
         width: 37.5px;
         opacity: 1;
       }
+    }
+    .captcha-no-pseudo::before { content: none; }
+    .captcha-no-pseudo::after { content: none; }
+    .captcha-close-button {
+      float: right;
+      margin-right: 0.25em;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+    .captcha-close-button:focus, .captcha-close-button:hover{
+      color: #0079ff;
+      cursor: pointer;
+    }
+    .captcha-submit{
+      width: 100%;
+      position:absolute;
+      bottom: 0;
+      right: 0;
+      background-color: #edeeee;
+      color: #202129;
+      display: -webkit-box;
+      display: -ms-flexbox;
+      display: flex;
+      overflow: hidden;
+      padding: 8px 8px;
+      cursor: pointer;
+      -webkit-user-select: none;
+         -moz-user-select: none;
+          -ms-user-select: none;
+              user-select: none;
+      -webkit-transition: all 60ms ease-in-out;
+      transition: all 60ms ease-in-out;
+      text-align: center;
+      white-space: nowrap;
+      text-decoration: none !important;
+      text-transform: none;
+      text-transform: capitalize;
+      border: 0 none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.3;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      -webkit-box-pack: center;
+          -ms-flex-pack: center;
+              justify-content: center;
+      -webkit-box-align: center;
+          -ms-flex-align: center;
+              align-items: center;
+      -webkit-box-flex: 0;
+          -ms-flex: 0 0 160px;
+              flex: 0 0 160px;
+    }
+    .captcha-submit:hover {
+      color: #202129;
+      background-color: #e1e2e2;
+      opacity: 1;
+      -webkit-transition: all 60ms ease;
+      transition: all 60ms ease;
+    }
+    .captcha-submit:active {
+      background-color: #d5d6d6;
+      opacity: 1;
+      -webkit-transition: all 60ms ease;
+      transition: all 60ms ease;
+    }
+    .captcha-submit:focus {
+      outline: 1px dotted #959595;
+      outline-offset: -4px;
+    }
+    .captcha-submit.disabled {
+      color: #9F9F9F !important;
+      background-color: #DFDFDF !important;
+      opacity: 0.8 !important;
     }
   `;
   let font = document.createElement('link');

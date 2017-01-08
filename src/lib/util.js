@@ -94,3 +94,50 @@ export function toRes(res, status=200) {
     res.status(status).json(thing);
   };
 }
+
+export function rms(buffer, min=-1, max=1){
+  let range = (max - min) / 2;
+  let mid = (min + max) / 2;
+  let sum = 0;
+  buffer.forEach(function(sample){
+    sample = (sample - mid) / range;
+    sum += Math.pow(sample, 2);
+  });
+  sum = sum / buffer.length;
+  return Math.sqrt(sum);
+}
+
+
+export function compute_rms(filepath, start_time, end_time, callback){
+  return new Promise(function(resolve, reject){
+    let ffm = new ffmpeg(filepath);
+    ffm.seekInput(start_time/1000);
+    ffm.duration(end_time/1000 - start_time/1000);
+    ffm.audioCodec('pcm_u8');
+    ffm.format('u8');
+    let output = ffm.pipe({ end: true }); 
+    output.buffers = []; 
+    output.on('data', function(b){
+      this.buffers.push(b);
+    }); 
+    ffm.on('error', function(err, stdout, stderr) {
+      console.log('Cannot process audio file: ' + err.message);
+      reject(err);
+    }); 
+    output.on('end', function(stdout, stderr) {
+      let buffer = Buffer.concat(this.buffers);
+      let pcm = bufferToPCM(buffer);
+      let value = rms(pcm, 0, 256);
+      resolve(value);
+    });
+  });
+}
+
+function bufferToPCM(buf) {
+  var ab = new ArrayBuffer(buf.length);
+  var view = new Uint8Array(ab);
+  for (var i = 0; i < buf.length; ++i) {
+    view[i] = buf[i];
+  }
+  return view;
+}

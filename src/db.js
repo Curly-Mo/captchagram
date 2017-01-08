@@ -5,36 +5,35 @@ let db_config = {
   host     : 'localhost',
   user     : config.user,
   password : config.password,
-  database : 'sat'
+  database : 'sat',
 }
-	
 
-export default callback => {
-	// connect to a database if needed, then pass it to `callback`:
-	var connection;
+var pool = mysql.createPool(db_config);
 
-	function handleDisconnect() {
-		connection = mysql.createConnection(db_config); // Recreate the connection, since
-																										// the old one cannot be reused.
-
-		connection.connect(function(err) {              // The server is either down
-			if(err) {                                     // or restarting (takes a while sometimes).
-				console.log('error when connecting to db:', err);
-				setTimeout(handleDisconnect, 2000); // We introduce a delay before attempting to reconnect,
-			}                                     // to avoid a hot loop, and to allow our node script to
-		});                                     // process asynchronous requests in the meantime.
-																						// If you're also serving http, display a 503 error.
-		connection.on('error', function(err) {
-			console.log('db error', err);
-			if(err.code === 'PROTOCOL_CONNECTION_LOST') { // Connection to the MySQL server is usually
-				handleDisconnect();                         // lost due to either server restart, or a
-			} else {                                      // connnection idle timeout (the wait_timeout
-				throw err;                                  // server variable configures this)
-			}
-		});
-	}
-
-	handleDisconnect();
-
-	callback(connection);
-}
+module.exports = {
+  query: function(){
+    var sql_args = [];
+    var args = [];
+    for(var i=0; i<arguments.length; i++){
+      args.push(arguments[i]);
+    }
+    var callback = args[args.length-1]; //last arg is callback
+    pool.getConnection(function(err, connection) {
+      if(err) {
+        console.log(err);
+        return callback(err);
+      }
+      if(args.length > 2){
+        sql_args = args[1];
+      }
+      connection.query(args[0], sql_args, function(err, results) {
+        connection.release(); // always put connection back in pool after last query
+        if(err){
+          console.log(err);
+          return callback(err);
+        }
+        callback(null, results);
+      });
+    });
+  }
+};
