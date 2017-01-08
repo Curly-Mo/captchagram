@@ -74,7 +74,7 @@ class Heardcha{
     info.title = 'Help';
     info.addEventListener('click', function(e){
       e.preventDefault();
-      if(captcha.about == true){
+      if(captcha.about){
         captcha.about = false;
         captcha.overlay.style.display = 'none';
       }else{
