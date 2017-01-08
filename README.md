@@ -15,10 +15,31 @@ cd ./data
 ./download_wordnet.sh
 
 # Start development live-reload server
-PORT=8080 npm run dev
+npm run dev
 
 # Start production server:
-PORT=8080 npm start
+npm start
+```
+
+Analysis
+--------
+To execute the script that populates the `intersections` table. This could perhaps be run *weekly* in a cron script.
+```sh
+npm run analyze
+``` 
+
+Config
+------
+src/config.json
+```
+{
+  "port": 8080,
+  "bodyLimit": "100kb",
+  "corsHeaders": ["Link"],
+  "audioDir": "Directory where audio files live on server",
+  "user": "username",
+  "password": "password"
+}
 ```
 
 
